@@ -315,5 +315,12 @@ actor MCPServer {
         // Nice to have
         toolRegistry.register(FtmsMonitorTool())
         toolRegistry.register(FtmsTestSequenceTool())
+
+        // Heart Rate Service
+        toolRegistry.register(HrsDiscoverTool())
+        toolRegistry.register(HrsReadTool())
+        toolRegistry.register(HrsSubscribeTool())
+        toolRegistry.register(HrsUnsubscribeTool())
+        toolRegistry.register(HrsLocationTool())
     }
 }

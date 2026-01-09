@@ -50,6 +50,13 @@ ble_read uuid="2A19"           # read battery level
 - `ble_battery` - Read battery level (if available)
 - `ble_device_info` - Read manufacturer, model, serial, firmware
 
+### Heart Rate Service (HRS)
+- `hrs_discover` - Scan for heart rate monitors
+- `hrs_read` - Read current heart rate (BPM)
+- `hrs_subscribe` - Stream heart rate with min/max/avg and HRV stats
+- `hrs_unsubscribe` - Stop streaming
+- `hrs_location` - Read sensor location (chest, wrist, etc.)
+
 ### FTMS Discovery
 - `ftms_discover` - Scan specifically for FTMS devices (service UUID 0x1826)
 - `ftms_info` - Read FTMS Feature characteristic to show supported features

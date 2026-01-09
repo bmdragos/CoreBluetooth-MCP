@@ -4,9 +4,11 @@
 
 ### BLE Profiles
 
-- [ ] **Heart Rate Service (0x180D)**
+- [x] **Heart Rate Service (0x180D)**
+  - `hrs_discover` - scan for heart rate monitors
   - `hrs_read` - single heart rate reading
-  - `hrs_subscribe` - stream heart rate data
+  - `hrs_subscribe` - stream heart rate with HRV stats
+  - `hrs_location` - sensor location
 
 - [ ] **Cycling Power Service (0x1818)**
   - `cps_read` - power, cadence, pedal balance
