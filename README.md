@@ -10,7 +10,7 @@ A native macOS MCP server for Bluetooth Low Energy testing. Works with any BLE d
 
 ```bash
 brew install mint
-mint install bmdragos/CoreBluetooth-MCP@1.0.4
+mint install bmdragos/CoreBluetooth-MCP@1.0.5
 ```
 
 Add to `~/.claude/settings.json`:
