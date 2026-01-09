@@ -681,3 +681,98 @@ struct BleUnsubscribeTool: Tool {
         return "Unsubscribed from \(uuid.uuidString)"
     }
 }
+
+// MARK: - ble_battery
+
+struct BleBatteryTool: Tool {
+    let name = "ble_battery"
+    let description = "Read battery level from a device (if Battery Service 0x180F is available)."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([:])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        let batteryUUID = CBUUID(string: "2A19")
+
+        do {
+            let data = try await bleManager.read(characteristicUUID: batteryUUID)
+            guard data.count >= 1 else {
+                throw ToolError("Invalid battery data")
+            }
+            let level = data[0]
+            return "Battery: \(level)%"
+        } catch {
+            throw ToolError("Battery Service not available on this device")
+        }
+    }
+}
+
+// MARK: - ble_device_info
+
+struct BleDeviceInfoTool: Tool {
+    let name = "ble_device_info"
+    let description = "Read Device Information Service (manufacturer, model, serial, firmware, etc.)."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([:])
+        ]
+    }
+
+    private let deviceInfoCharacteristics: [(uuid: String, name: String)] = [
+        ("2A29", "Manufacturer"),
+        ("2A24", "Model Number"),
+        ("2A25", "Serial Number"),
+        ("2A27", "Hardware Revision"),
+        ("2A26", "Firmware Revision"),
+        ("2A28", "Software Revision"),
+        ("2A23", "System ID"),
+        ("2A2A", "IEEE Regulatory Cert")
+    ]
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        var lines: [String] = []
+        lines.append("Device Information:")
+        lines.append("")
+
+        var foundAny = false
+
+        for (uuidStr, name) in deviceInfoCharacteristics {
+            let uuid = CBUUID(string: uuidStr)
+            do {
+                let data = try await bleManager.read(characteristicUUID: uuid)
+                if let value = String(data: data, encoding: .utf8) {
+                    lines.append("\(name): \(value)")
+                    foundAny = true
+                } else if !data.isEmpty {
+                    // Show as hex for non-string data (like System ID)
+                    lines.append("\(name): \(data.hexString)")
+                    foundAny = true
+                }
+            } catch {
+                // Characteristic not available, skip silently
+            }
+        }
+
+        if !foundAny {
+            return "Device Information Service (0x180A) not available on this device"
+        }
+
+        return lines.joined(separator: "\n")
+    }
+}

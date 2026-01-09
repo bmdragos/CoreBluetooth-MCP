@@ -13,8 +13,11 @@
   - `cps_subscribe` - stream power data
   - Useful for standalone power meters
 
-- [ ] **Battery Service (0x180F)**
-  - `battery_read` - battery level for any device
+- [x] **Battery Service (0x180F)**
+  - `ble_battery` - battery level for any device
+
+- [x] **Device Information Service (0x180A)**
+  - `ble_device_info` - manufacturer, model, serial, firmware, hardware revision
 
 ### Additional FTMS Controls
 
