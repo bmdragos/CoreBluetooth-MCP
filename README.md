@@ -1,8 +1,32 @@
 # CoreBluetooth-MCP
 
-A native macOS MCP server for Bluetooth Low Energy testing, with first-class support for FTMS (Fitness Machine Service) devices like bike trainers and smart bikes.
+A native macOS MCP server for Bluetooth Low Energy testing. Works with any BLE device, with first-class support for FTMS fitness equipment.
 
-Built with Swift and CoreBluetooth. No Node.js, Python, or external dependencies.
+## Quick Start
+
+```bash
+brew install mint
+mint install bmdragos/CoreBluetooth-MCP@1.0.0
+```
+
+Add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "corebluetooth-mcp": {
+      "command": "/Users/YOUR_USERNAME/.mint/bin/corebluetooth-mcp"
+    }
+  }
+}
+```
+
+Run `/mcp` in Claude Code, then:
+```
+ble_scan                        # find devices
+ble_connect identifier="My Device"
+ble_services                    # see what's available
+ble_read uuid="2A19"           # read battery level
+```
 
 ## Features
 
@@ -43,40 +67,6 @@ Built with Swift and CoreBluetooth. No Node.js, Python, or external dependencies
 - `ftms_test_sequence` - Automated validation: request control, set power levels, verify readings
 - `ftms_log_start` / `ftms_log_stop` - Log notifications to CSV
 - `ftms_raw_read` / `ftms_raw_write` - Raw characteristic access for debugging
-
-## Installation
-
-### Install with Mint (Recommended)
-
-```bash
-brew install mint                              # if you don't have Mint
-mint install bmdragos/CoreBluetooth-MCP@1.0.0
-```
-
-### Configure Claude Code
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "corebluetooth-mcp": {
-      "command": "/Users/YOUR_USERNAME/.mint/bin/corebluetooth-mcp"
-    }
-  }
-}
-```
-
-Run `/mcp` in Claude Code to connect.
-
-### Build from source (alternative)
-
-```bash
-git clone https://github.com/bmdragos/CoreBluetooth-MCP.git
-cd CoreBluetooth-MCP
-swift build -c release
-# Binary at .build/release/corebluetooth-mcp
-```
 
 ## Usage Examples
 
@@ -152,18 +142,20 @@ Status: ALL TESTS PASSED ✓
 - **Inline testing** - Test BLE firmware without leaving your IDE
 - **FTMS-first** - Purpose-built for fitness device development
 
-## Releasing
-
-To publish a new version:
+## Build from Source
 
 ```bash
-git tag 1.1.0
-git push origin 1.1.0
+git clone https://github.com/bmdragos/CoreBluetooth-MCP.git
+cd CoreBluetooth-MCP
+swift build -c release
 ```
 
-Users can then update with:
+Binary at `.build/release/corebluetooth-mcp`
+
+## Releasing
+
 ```bash
-mint install bmdragos/CoreBluetooth-MCP@1.1.0
+git tag 1.1.0 && git push origin 1.1.0
 ```
 
 ## License
