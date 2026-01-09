@@ -26,8 +26,8 @@
 
 ### Generic BLE Inspection
 
-- [ ] `ble_services` - list all services on connected device
-- [ ] `ble_characteristics` - list characteristics for a service with properties (read/write/notify)
+- [x] `ble_services` - list all services on connected device
+- [x] `ble_characteristics` - list characteristics for a service with properties (read/write/notify)
 - [ ] `ble_descriptors` - read characteristic descriptors
 
 ### Quality of Life

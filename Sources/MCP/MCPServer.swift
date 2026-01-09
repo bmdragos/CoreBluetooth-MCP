@@ -281,6 +281,8 @@ actor MCPServer {
         toolRegistry.register(BleConnectTool())
         toolRegistry.register(BleDisconnectTool())
         toolRegistry.register(BleStatusTool())
+        toolRegistry.register(BleServicesTool())
+        toolRegistry.register(BleCharacteristicsTool())
 
         // FTMS Discovery
         toolRegistry.register(FtmsDiscoverTool())

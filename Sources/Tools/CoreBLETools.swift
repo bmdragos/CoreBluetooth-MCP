@@ -183,3 +183,211 @@ struct BleStatusTool: Tool {
         return lines.joined(separator: "\n")
     }
 }
+
+// MARK: - ble_services
+
+struct BleServicesTool: Tool {
+    let name = "ble_services"
+    let description = "List all services on the connected device with their UUIDs and characteristic count."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([:])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        let services = await bleManager.getServices()
+
+        if services.isEmpty {
+            return "No services discovered"
+        }
+
+        var lines: [String] = []
+        lines.append("Services (\(services.count)):")
+        lines.append("")
+
+        for service in services.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
+            let name = knownServiceName(service.uuid) ?? "Unknown Service"
+            lines.append("• \(service.uuid.uuidString)")
+            lines.append("  Name: \(name)")
+            lines.append("  Characteristics: \(service.characteristics.count)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    // Official Bluetooth SIG Assigned Numbers
+    // Source: https://github.com/NordicSemiconductor/bluetooth-numbers-database
+    private func knownServiceName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            "1800": "Generic Access",
+            "1801": "Generic Attribute",
+            "180A": "Device Information",
+            "180D": "Heart Rate",
+            "180F": "Battery Service",
+            "1816": "Cycling Speed and Cadence",
+            "1818": "Cycling Power",
+            "1826": "Fitness Machine"
+        ]
+        return known[uuid.uuidString]
+    }
+}
+
+// MARK: - ble_characteristics
+
+struct BleCharacteristicsTool: Tool {
+    let name = "ble_characteristics"
+    let description = "List characteristics for a service (or all services) with their properties (read/write/notify)."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "service": .object([
+                    "type": .string("string"),
+                    "description": .string("Service UUID to inspect (e.g., '1826'). If omitted, lists all characteristics.")
+                ])
+            ])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        if let serviceUUIDString = arguments["service"]?.stringValue {
+            // List characteristics for specific service
+            let serviceUUID = CBUUID(string: serviceUUIDString)
+            guard let characteristics = await bleManager.getCharacteristics(forService: serviceUUID) else {
+                throw ToolError("Service \(serviceUUIDString) not found")
+            }
+
+            var lines: [String] = []
+            lines.append("Characteristics for service \(serviceUUIDString):")
+            lines.append("")
+
+            for char in characteristics.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
+                let name = knownCharacteristicName(char.uuid) ?? "Unknown"
+                let props = formatProperties(char.properties)
+                lines.append("• \(char.uuid.uuidString)")
+                lines.append("  Name: \(name)")
+                lines.append("  Properties: \(props)")
+            }
+
+            return lines.joined(separator: "\n")
+        } else {
+            // List all characteristics grouped by service
+            let allChars = await bleManager.getAllCharacteristics()
+
+            if allChars.isEmpty {
+                return "No characteristics discovered"
+            }
+
+            // Group by service
+            var byService: [CBUUID: [(uuid: CBUUID, properties: CBCharacteristicProperties)]] = [:]
+            for char in allChars {
+                byService[char.serviceUUID, default: []].append((char.uuid, char.properties))
+            }
+
+            var lines: [String] = []
+            lines.append("All Characteristics (\(allChars.count) total):")
+            lines.append("")
+
+            for serviceUUID in byService.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+                let serviceName = knownServiceName(serviceUUID) ?? "Unknown Service"
+                lines.append("━━━ \(serviceUUID.uuidString) (\(serviceName)) ━━━")
+
+                for char in byService[serviceUUID]!.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
+                    let name = knownCharacteristicName(char.uuid) ?? "Unknown"
+                    let props = formatProperties(char.properties)
+                    lines.append("  • \(char.uuid.uuidString) [\(props)]")
+                    lines.append("    \(name)")
+                }
+                lines.append("")
+            }
+
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    private func formatProperties(_ props: CBCharacteristicProperties) -> String {
+        var parts: [String] = []
+        if props.contains(.read) { parts.append("R") }
+        if props.contains(.write) { parts.append("W") }
+        if props.contains(.writeWithoutResponse) { parts.append("WNR") }
+        if props.contains(.notify) { parts.append("N") }
+        if props.contains(.indicate) { parts.append("I") }
+        return parts.isEmpty ? "none" : parts.joined(separator: ", ")
+    }
+
+    // Official Bluetooth SIG Assigned Numbers
+    // Source: https://github.com/NordicSemiconductor/bluetooth-numbers-database
+    private func knownServiceName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            "1800": "Generic Access",
+            "1801": "Generic Attribute",
+            "180A": "Device Information",
+            "180D": "Heart Rate",
+            "180F": "Battery Service",
+            "1816": "Cycling Speed and Cadence",
+            "1818": "Cycling Power",
+            "1826": "Fitness Machine"
+        ]
+        return known[uuid.uuidString]
+    }
+
+    // Official Bluetooth SIG Assigned Numbers
+    // Source: https://github.com/NordicSemiconductor/bluetooth-numbers-database
+    private func knownCharacteristicName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            // Generic Access
+            "2A00": "Device Name",
+            "2A01": "Appearance",
+            // Device Information
+            "2A29": "Manufacturer Name String",
+            "2A24": "Model Number String",
+            "2A25": "Serial Number String",
+            "2A27": "Hardware Revision String",
+            "2A26": "Firmware Revision String",
+            "2A28": "Software Revision String",
+            // Battery
+            "2A19": "Battery Level",
+            // Heart Rate
+            "2A37": "Heart Rate Measurement",
+            "2A38": "Body Sensor Location",
+            // Cycling Power
+            "2A63": "Cycling Power Measurement",
+            "2A65": "Cycling Power Feature",
+            "2A66": "Cycling Power Control Point",
+            // Cycling Speed and Cadence
+            "2A5B": "CSC Measurement",
+            "2A5C": "CSC Feature",
+            // FTMS
+            "2ACC": "Fitness Machine Feature",
+            "2ACD": "Treadmill Data",
+            "2ACE": "Cross Trainer Data",
+            "2ACF": "Step Climber Data",
+            "2AD0": "Stair Climber Data",
+            "2AD1": "Rower Data",
+            "2AD2": "Indoor Bike Data",
+            "2AD3": "Training Status",
+            "2AD4": "Supported Speed Range",
+            "2AD5": "Supported Inclination Range",
+            "2AD6": "Supported Resistance Level Range",
+            "2AD7": "Supported Heart Rate Range",
+            "2AD8": "Supported Power Range",
+            "2AD9": "Fitness Machine Control Point",
+            "2ADA": "Fitness Machine Status"
+        ]
+        return known[uuid.uuidString]
+    }
+}

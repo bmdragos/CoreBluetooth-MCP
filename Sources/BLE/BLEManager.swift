@@ -321,6 +321,28 @@ actor BLEManager {
         ]
     }
 
+    func getServices() -> [(uuid: CBUUID, characteristics: [CBUUID])] {
+        return discoveredServices.values.map { service in
+            let charUUIDs = service.characteristics?.map { $0.uuid } ?? []
+            return (uuid: service.uuid, characteristics: charUUIDs)
+        }
+    }
+
+    func getCharacteristics(forService serviceUUID: CBUUID) -> [(uuid: CBUUID, properties: CBCharacteristicProperties)]? {
+        guard let service = discoveredServices[serviceUUID] else { return nil }
+        return service.characteristics?.map { ($0.uuid, $0.properties) }
+    }
+
+    func getAllCharacteristics() -> [(uuid: CBUUID, serviceUUID: CBUUID, properties: CBCharacteristicProperties)] {
+        var result: [(uuid: CBUUID, serviceUUID: CBUUID, properties: CBCharacteristicProperties)] = []
+        for (serviceUUID, service) in discoveredServices {
+            for char in service.characteristics ?? [] {
+                result.append((uuid: char.uuid, serviceUUID: serviceUUID, properties: char.properties))
+            }
+        }
+        return result
+    }
+
     func getRSSI() async -> Int? {
         guard let peripheral = connectedPeripheral else { return nil }
         peripheral.readRSSI()
