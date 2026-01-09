@@ -11,6 +11,16 @@ Built with Swift and CoreBluetooth. No Node.js, Python, or external dependencies
 - `ble_connect` - Connect to a device by name or UUID
 - `ble_disconnect` - Disconnect from the current device
 - `ble_status` - Show connection state, device info, and signal strength
+- `ble_services` - List all services on connected device
+- `ble_characteristics` - List characteristics with properties (read/write/notify)
+
+### Generic BLE Operations
+- `ble_read` - Read any characteristic by UUID with auto-decoding
+- `ble_write` - Write hex bytes or text to any characteristic
+- `ble_subscribe` - Subscribe to notifications from any characteristic
+- `ble_unsubscribe` - Stop notifications
+- `ble_battery` - Read battery level (if available)
+- `ble_device_info` - Read manufacturer, model, serial, firmware
 
 ### FTMS Discovery
 - `ftms_discover` - Scan specifically for FTMS devices (service UUID 0x1826)
@@ -36,30 +46,58 @@ Built with Swift and CoreBluetooth. No Node.js, Python, or external dependencies
 
 ## Installation
 
-### Build from source
+### Option 1: Mint (Recommended for Swift developers)
 
 ```bash
-git clone https://github.com/yourusername/CoreBluetooth-MCP.git
-cd CoreBluetooth-MCP
-swift build -c release
+# Install Mint if you don't have it
+brew install mint
+
+# Install CoreBluetooth-MCP
+mint install bmdragos/CoreBluetooth-MCP
 ```
 
-### Add to Claude Code
+Binary installs to `~/.mint/bin/corebluetooth-mcp`
 
-Add to `~/.claude.json`:
+### Option 2: Build from source
+
+```bash
+git clone https://github.com/bmdragos/CoreBluetooth-MCP.git
+cd CoreBluetooth-MCP
+swift build -c release
+
+# Optional: copy to a permanent location
+cp .build/release/corebluetooth-mcp /usr/local/bin/
+```
+
+## Configure Claude Code
+
+Add to your `~/.claude/settings.json` or project `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "corebluetooth-mcp": {
       "type": "stdio",
-      "command": "/path/to/CoreBluetooth-MCP/.build/release/corebluetooth-mcp"
+      "command": "~/.mint/bin/corebluetooth-mcp"
     }
   }
 }
 ```
 
-Then run `/mcp reconnect` in Claude Code.
+Or if you built from source:
+
+```json
+{
+  "mcpServers": {
+    "corebluetooth-mcp": {
+      "type": "stdio",
+      "command": "/usr/local/bin/corebluetooth-mcp"
+    }
+  }
+}
+```
+
+Then run `/mcp` in Claude Code to connect.
 
 ## Usage Examples
 
