@@ -13,6 +13,11 @@ let package = Package(
         .executableTarget(
             name: "CoreBluetooth-MCP",
             path: "Sources"
+        ),
+        .testTarget(
+            name: "CoreBluetoothMCPTests",
+            dependencies: ["CoreBluetooth-MCP"],
+            path: "Tests"
         )
     ]
 )
