@@ -24,10 +24,14 @@
 - [ ] Support for Indoor Rower Data
 - [ ] Support for Treadmill Data
 
-### Generic BLE Inspection
+### Generic BLE Operations
 
 - [x] `ble_services` - list all services on connected device
 - [x] `ble_characteristics` - list characteristics for a service with properties (read/write/notify)
+- [x] `ble_read` - read any characteristic by UUID with auto-decoding
+- [x] `ble_write` - write to any characteristic (hex or text)
+- [x] `ble_subscribe` - subscribe to notifications from any characteristic
+- [x] `ble_unsubscribe` - stop notifications
 - [ ] `ble_descriptors` - read characteristic descriptors
 
 ### Quality of Life

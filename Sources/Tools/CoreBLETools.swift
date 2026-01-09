@@ -391,3 +391,293 @@ struct BleCharacteristicsTool: Tool {
         return known[uuid.uuidString]
     }
 }
+
+// MARK: - ble_read
+
+struct BleReadTool: Tool {
+    let name = "ble_read"
+    let description = "Read any characteristic by UUID. Returns hex data and decoded values if possible."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "uuid": .object([
+                    "type": .string("string"),
+                    "description": .string("Characteristic UUID (e.g., '2A19' for battery level, or full UUID)")
+                ])
+            ]),
+            "required": .array([.string("uuid")])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        guard let uuidString = arguments["uuid"]?.stringValue else {
+            throw ToolError("Missing 'uuid' parameter")
+        }
+
+        let uuid = CBUUID(string: uuidString)
+        let data = try await bleManager.read(characteristicUUID: uuid)
+
+        var lines: [String] = []
+        lines.append("Characteristic: \(uuid.uuidString)")
+        if let name = knownCharacteristicName(uuid) {
+            lines.append("Name: \(name)")
+        }
+        lines.append("Length: \(data.count) bytes")
+        lines.append("Hex: \(data.hexString)")
+
+        // Try to decode as ASCII if printable
+        if let ascii = String(data: data, encoding: .utf8),
+           ascii.allSatisfy({ $0.isASCII && !$0.isNewline }) {
+            lines.append("ASCII: \(ascii)")
+        }
+
+        // Known characteristic decodings
+        if let decoded = decodeKnownCharacteristic(uuid: uuid, data: data) {
+            lines.append("Value: \(decoded)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func decodeKnownCharacteristic(uuid: CBUUID, data: Data) -> String? {
+        switch uuid.uuidString {
+        case "2A19": // Battery Level
+            guard data.count >= 1 else { return nil }
+            return "\(data[0])%"
+        case "2A37": // Heart Rate Measurement
+            guard data.count >= 2 else { return nil }
+            let flags = data[0]
+            let is16bit = (flags & 0x01) != 0
+            if is16bit && data.count >= 3 {
+                let hr = UInt16(data[1]) | (UInt16(data[2]) << 8)
+                return "\(hr) bpm"
+            } else {
+                return "\(data[1]) bpm"
+            }
+        default:
+            return nil
+        }
+    }
+
+    private func knownCharacteristicName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            "2A00": "Device Name",
+            "2A19": "Battery Level",
+            "2A29": "Manufacturer Name",
+            "2A24": "Model Number",
+            "2A25": "Serial Number",
+            "2A26": "Firmware Revision",
+            "2A27": "Hardware Revision",
+            "2A28": "Software Revision",
+            "2A37": "Heart Rate Measurement",
+            "2A38": "Body Sensor Location",
+            "2A63": "Cycling Power Measurement",
+            "2ACC": "Fitness Machine Feature",
+            "2AD2": "Indoor Bike Data",
+            "2AD9": "Fitness Machine Control Point"
+        ]
+        return known[uuid.uuidString]
+    }
+}
+
+// MARK: - ble_write
+
+struct BleWriteTool: Tool {
+    let name = "ble_write"
+    let description = "Write to any characteristic by UUID. Supports hex bytes or text."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "uuid": .object([
+                    "type": .string("string"),
+                    "description": .string("Characteristic UUID (e.g., '2AD9')")
+                ]),
+                "hex": .object([
+                    "type": .string("string"),
+                    "description": .string("Hex bytes to write, space-separated (e.g., '05 64 00')")
+                ]),
+                "text": .object([
+                    "type": .string("string"),
+                    "description": .string("Text to write (alternative to hex)")
+                ]),
+                "response": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Wait for write response (default: true)")
+                ])
+            ]),
+            "required": .array([.string("uuid")])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        guard let uuidString = arguments["uuid"]?.stringValue else {
+            throw ToolError("Missing 'uuid' parameter")
+        }
+
+        let data: Data
+        if let hexString = arguments["hex"]?.stringValue {
+            // Parse hex string
+            let hexParts = hexString.split(separator: " ").compactMap { part -> UInt8? in
+                let hex = part.hasPrefix("0x") ? String(part.dropFirst(2)) : String(part)
+                return UInt8(hex, radix: 16)
+            }
+            guard !hexParts.isEmpty else {
+                throw ToolError("Invalid hex string. Use format like '05 64 00' or '0x05 0x64 0x00'")
+            }
+            data = Data(hexParts)
+        } else if let textString = arguments["text"]?.stringValue {
+            guard let textData = textString.data(using: .utf8) else {
+                throw ToolError("Could not encode text as UTF-8")
+            }
+            data = textData
+        } else {
+            throw ToolError("Missing 'hex' or 'text' parameter")
+        }
+
+        let withResponse = arguments["response"]?.stringValue != "false"
+
+        let uuid = CBUUID(string: uuidString)
+        try await bleManager.write(characteristicUUID: uuid, data: data, withResponse: withResponse)
+
+        let responseType = withResponse ? "with response" : "without response"
+        return "Wrote \(data.count) bytes to \(uuid.uuidString) (\(responseType))\nData: \(data.hexString)"
+    }
+}
+
+// MARK: - ble_subscribe
+
+struct BleSubscribeTool: Tool {
+    let name = "ble_subscribe"
+    let description = "Subscribe to notifications from any characteristic. Collects samples and returns summary."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "uuid": .object([
+                    "type": .string("string"),
+                    "description": .string("Characteristic UUID to subscribe to (e.g., '2A37' for heart rate)")
+                ]),
+                "samples": .object([
+                    "type": .string("integer"),
+                    "description": .string("Number of notifications to collect (default: 10, max: 100)")
+                ]),
+                "timeout": .object([
+                    "type": .string("integer"),
+                    "description": .string("Timeout in seconds (default: 30)")
+                ]),
+                "format": .object([
+                    "type": .string("string"),
+                    "description": .string("Output format: 'hex' (default), 'ascii', or 'raw'")
+                ])
+            ]),
+            "required": .array([.string("uuid")])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        guard let uuidString = arguments["uuid"]?.stringValue else {
+            throw ToolError("Missing 'uuid' parameter")
+        }
+
+        let sampleCount = min(arguments["samples"]?.intValue ?? 10, 100)
+        let timeout = arguments["timeout"]?.intValue ?? 30
+        let format = arguments["format"]?.stringValue ?? "hex"
+
+        let uuid = CBUUID(string: uuidString)
+        let stream = try await bleManager.subscribe(characteristicUUID: uuid)
+
+        var samples: [Data] = []
+        let startTime = Date()
+
+        for await data in stream {
+            samples.append(data)
+            if samples.count >= sampleCount {
+                break
+            }
+            if Date().timeIntervalSince(startTime) > Double(timeout) {
+                break
+            }
+        }
+
+        await bleManager.unsubscribe(characteristicUUID: uuid)
+
+        if samples.isEmpty {
+            return "No notifications received within \(timeout)s timeout"
+        }
+
+        var lines: [String] = []
+        lines.append("Received \(samples.count) notification(s) from \(uuid.uuidString)")
+        lines.append("")
+
+        for (index, data) in samples.enumerated() {
+            let formatted: String
+            switch format {
+            case "ascii":
+                formatted = String(data: data, encoding: .utf8) ?? data.hexString
+            case "raw":
+                formatted = data.map { String($0) }.joined(separator: ",")
+            default:
+                formatted = data.hexString
+            }
+            lines.append("[\(index + 1)] \(formatted) (\(data.count) bytes)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - ble_unsubscribe
+
+struct BleUnsubscribeTool: Tool {
+    let name = "ble_unsubscribe"
+    let description = "Stop notifications from a characteristic."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "uuid": .object([
+                    "type": .string("string"),
+                    "description": .string("Characteristic UUID to unsubscribe from")
+                ])
+            ]),
+            "required": .array([.string("uuid")])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        guard let uuidString = arguments["uuid"]?.stringValue else {
+            throw ToolError("Missing 'uuid' parameter")
+        }
+
+        let uuid = CBUUID(string: uuidString)
+        await bleManager.unsubscribe(characteristicUUID: uuid)
+
+        return "Unsubscribed from \(uuid.uuidString)"
+    }
+}
