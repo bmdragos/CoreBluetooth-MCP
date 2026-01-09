@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="CoreBluetooth-MCP" width="128">
+</p>
+
 # CoreBluetooth-MCP
 
 A native macOS MCP server for Bluetooth Low Energy testing. Works with any BLE device, with first-class support for FTMS fitness equipment.
