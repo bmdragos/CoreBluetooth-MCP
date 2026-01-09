@@ -46,58 +46,37 @@ Built with Swift and CoreBluetooth. No Node.js, Python, or external dependencies
 
 ## Installation
 
-### Option 1: Mint (Recommended for Swift developers)
+### Install with Mint (Recommended)
 
 ```bash
-# Install Mint if you don't have it
-brew install mint
-
-# Install CoreBluetooth-MCP
-mint install bmdragos/CoreBluetooth-MCP
+brew install mint                              # if you don't have Mint
+mint install bmdragos/CoreBluetooth-MCP@1.0.0
 ```
 
-Binary installs to `~/.mint/bin/corebluetooth-mcp`
+### Configure Claude Code
 
-### Option 2: Build from source
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "corebluetooth-mcp": {
+      "command": "/Users/YOUR_USERNAME/.mint/bin/corebluetooth-mcp"
+    }
+  }
+}
+```
+
+Run `/mcp` in Claude Code to connect.
+
+### Build from source (alternative)
 
 ```bash
 git clone https://github.com/bmdragos/CoreBluetooth-MCP.git
 cd CoreBluetooth-MCP
 swift build -c release
-
-# Optional: copy to a permanent location
-cp .build/release/corebluetooth-mcp /usr/local/bin/
+# Binary at .build/release/corebluetooth-mcp
 ```
-
-## Configure Claude Code
-
-Add to your `~/.claude/settings.json` or project `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "corebluetooth-mcp": {
-      "type": "stdio",
-      "command": "~/.mint/bin/corebluetooth-mcp"
-    }
-  }
-}
-```
-
-Or if you built from source:
-
-```json
-{
-  "mcpServers": {
-    "corebluetooth-mcp": {
-      "type": "stdio",
-      "command": "/usr/local/bin/corebluetooth-mcp"
-    }
-  }
-}
-```
-
-Then run `/mcp` in Claude Code to connect.
 
 ## Usage Examples
 
@@ -172,6 +151,20 @@ Status: ALL TESTS PASSED ✓
 - **No dependencies** - Single binary, no npm/pip/runtime needed
 - **Inline testing** - Test BLE firmware without leaving your IDE
 - **FTMS-first** - Purpose-built for fitness device development
+
+## Releasing
+
+To publish a new version:
+
+```bash
+git tag 1.1.0
+git push origin 1.1.0
+```
+
+Users can then update with:
+```bash
+mint install bmdragos/CoreBluetooth-MCP@1.1.0
+```
 
 ## License
 
