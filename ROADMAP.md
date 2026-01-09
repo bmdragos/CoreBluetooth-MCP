@@ -1,0 +1,56 @@
+# CoreBluetooth-MCP Roadmap
+
+## Planned Features
+
+### BLE Profiles
+
+- [ ] **Heart Rate Service (0x180D)**
+  - `hrs_read` - single heart rate reading
+  - `hrs_subscribe` - stream heart rate data
+
+- [ ] **Cycling Power Service (0x1818)**
+  - `cps_read` - power, cadence, pedal balance
+  - `cps_subscribe` - stream power data
+  - Useful for standalone power meters
+
+- [ ] **Battery Service (0x180F)**
+  - `battery_read` - battery level for any device
+
+### Additional FTMS Controls
+
+- [ ] `ftms_set_resistance` - resistance mode (0-100%)
+- [ ] `ftms_set_simulation` - simulation mode (grade %, wind speed, rolling resistance, air resistance)
+- [ ] `ftms_set_cadence` - target cadence
+- [ ] Support for Indoor Rower Data
+- [ ] Support for Treadmill Data
+
+### Generic BLE Inspection
+
+- [ ] `ble_services` - list all services on connected device
+- [ ] `ble_characteristics` - list characteristics for a service with properties (read/write/notify)
+- [ ] `ble_descriptors` - read characteristic descriptors
+
+### Quality of Life
+
+- [ ] `ble_reconnect` - reconnect to last connected device
+- [ ] `ble_rssi` - continuous signal strength monitoring
+- [ ] Configurable timeouts on subscribe operations
+- [ ] Auto-reconnect option on disconnect
+
+### Data Export
+
+- [ ] Export to FIT file format
+- [ ] Export to TCX format
+- [ ] Enhanced CSV export options
+
+---
+
+## Completed
+
+- [x] Core BLE (scan, connect, disconnect, status)
+- [x] FTMS discovery and feature detection
+- [x] FTMS data streaming with statistics
+- [x] FTMS power control
+- [x] Automated test sequences
+- [x] CSV logging
+- [x] Raw characteristic read/write
