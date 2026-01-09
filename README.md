@@ -47,6 +47,7 @@ ble_read uuid="2A19"           # read battery level
 - `ble_write` - Write hex bytes or text to any characteristic
 - `ble_subscribe` - Subscribe to notifications from any characteristic
 - `ble_unsubscribe` - Stop notifications
+- `ble_descriptors` - List descriptors for characteristics (CCCD, user description, etc.)
 - `ble_battery` - Read battery level (if available)
 - `ble_device_info` - Read manufacturer, model, serial, firmware
 

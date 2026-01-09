@@ -36,6 +36,7 @@ actor BLEManager {
     private(set) var discoveredDevices: [UUID: DiscoveredDevice] = [:]
     private(set) var discoveredServices: [CBUUID: CBService] = [:]
     private(set) var discoveredCharacteristics: [CBUUID: CBCharacteristic] = [:]
+    private(set) var discoveredDescriptors: [CBUUID: [CBDescriptor]] = [:] // keyed by characteristic UUID
 
     // Subscription state
     private var subscriptions: Set<CBUUID> = []
@@ -81,6 +82,7 @@ actor BLEManager {
         connectedPeripheral = nil
         discoveredServices.removeAll()
         discoveredCharacteristics.removeAll()
+        discoveredDescriptors.removeAll()
         subscriptions.removeAll()
         notificationBuffer.removeAll()
         for continuation in notificationContinuations.values {
@@ -105,7 +107,14 @@ actor BLEManager {
         guard let characteristics = characteristics else { return }
         for char in characteristics {
             discoveredCharacteristics[char.uuid] = char
+            // Discover descriptors for each characteristic
+            connectedPeripheral?.discoverDescriptors(for: char)
         }
+    }
+
+    func didDiscoverDescriptors(_ characteristic: CBCharacteristic, descriptors: [CBDescriptor]?) {
+        guard let descriptors = descriptors else { return }
+        discoveredDescriptors[characteristic.uuid] = descriptors
     }
 
     func didUpdateValue(_ characteristic: CBCharacteristic, error: Error?) {
@@ -350,6 +359,27 @@ actor BLEManager {
         return delegate.lastRSSI
     }
 
+    func getDescriptors(forCharacteristic charUUID: CBUUID) -> [CBDescriptor]? {
+        return discoveredDescriptors[charUUID]
+    }
+
+    func getAllDescriptors() -> [(characteristicUUID: CBUUID, descriptors: [CBDescriptor])] {
+        return discoveredDescriptors.map { ($0.key, $0.value) }
+    }
+
+    func readDescriptor(_ descriptor: CBDescriptor) async throws -> Any? {
+        guard connectionState == .connected else {
+            throw ToolError("Not connected")
+        }
+
+        connectedPeripheral?.readValue(for: descriptor)
+
+        // Wait for value (with timeout)
+        try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+
+        return descriptor.value
+    }
+
     // MARK: - Logging
 
     func startLogging(filePath: String) throws {
@@ -432,5 +462,9 @@ class BLEDelegate: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
         lastRSSI = RSSI.intValue
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: Error?) {
+        Task { await manager.didDiscoverDescriptors(characteristic, descriptors: characteristic.descriptors) }
     }
 }

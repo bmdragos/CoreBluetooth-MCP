@@ -392,6 +392,174 @@ struct BleCharacteristicsTool: Tool {
     }
 }
 
+// MARK: - ble_descriptors
+
+struct BleDescriptorsTool: Tool {
+    let name = "ble_descriptors"
+    let description = "List descriptors for a characteristic. Descriptors provide metadata like CCCD (notifications config)."
+
+    var inputSchema: [String: JSONValue] {
+        [
+            "type": .string("object"),
+            "properties": .object([
+                "characteristic": .object([
+                    "type": .string("string"),
+                    "description": .string("Characteristic UUID to list descriptors for (e.g., '2A37'). If omitted, lists all descriptors.")
+                ]),
+                "read_values": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Read descriptor values (default: false)")
+                ])
+            ])
+        ]
+    }
+
+    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+        let state = await bleManager.connectionState
+        guard state == .connected else {
+            throw ToolError("Not connected. Use ble_connect first.")
+        }
+
+        let readValues = arguments["read_values"]?.stringValue == "true"
+
+        if let charUUIDString = arguments["characteristic"]?.stringValue {
+            // List descriptors for specific characteristic
+            let charUUID = CBUUID(string: charUUIDString)
+            guard let descriptors = await bleManager.getDescriptors(forCharacteristic: charUUID) else {
+                return "No descriptors found for characteristic \(charUUIDString)"
+            }
+
+            if descriptors.isEmpty {
+                return "Characteristic \(charUUIDString) has no descriptors"
+            }
+
+            var lines: [String] = []
+            lines.append("Descriptors for \(charUUIDString):")
+            lines.append("")
+
+            for descriptor in descriptors {
+                let name = knownDescriptorName(descriptor.uuid) ?? "Unknown"
+                lines.append("• \(descriptor.uuid.uuidString)")
+                lines.append("  Name: \(name)")
+
+                if readValues {
+                    if let value = try? await bleManager.readDescriptor(descriptor) {
+                        lines.append("  Value: \(formatDescriptorValue(descriptor.uuid, value: value))")
+                    }
+                }
+            }
+
+            return lines.joined(separator: "\n")
+        } else {
+            // List all descriptors grouped by characteristic
+            let allDescriptors = await bleManager.getAllDescriptors()
+
+            if allDescriptors.isEmpty {
+                return "No descriptors discovered"
+            }
+
+            let totalCount = allDescriptors.reduce(0) { $0 + $1.descriptors.count }
+
+            var lines: [String] = []
+            lines.append("All Descriptors (\(totalCount) total):")
+            lines.append("")
+
+            for (charUUID, descriptors) in allDescriptors.sorted(by: { $0.characteristicUUID.uuidString < $1.characteristicUUID.uuidString }) {
+                if descriptors.isEmpty { continue }
+
+                let charName = knownCharacteristicName(charUUID) ?? "Unknown"
+                lines.append("━━━ \(charUUID.uuidString) (\(charName)) ━━━")
+
+                for descriptor in descriptors {
+                    let name = knownDescriptorName(descriptor.uuid) ?? "Unknown"
+                    var line = "  • \(descriptor.uuid.uuidString) - \(name)"
+
+                    if readValues {
+                        if let value = try? await bleManager.readDescriptor(descriptor) {
+                            line += " = \(formatDescriptorValue(descriptor.uuid, value: value))"
+                        }
+                    }
+                    lines.append(line)
+                }
+                lines.append("")
+            }
+
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    private func formatDescriptorValue(_ uuid: CBUUID, value: Any?) -> String {
+        guard let value = value else { return "(nil)" }
+
+        switch uuid.uuidString {
+        case "2902": // Client Characteristic Configuration
+            if let data = value as? Data, data.count >= 2 {
+                let config = UInt16(data[0]) | (UInt16(data[1]) << 8)
+                var parts: [String] = []
+                if config & 0x01 != 0 { parts.append("Notifications") }
+                if config & 0x02 != 0 { parts.append("Indications") }
+                return parts.isEmpty ? "Disabled" : parts.joined(separator: ", ")
+            }
+        case "2903": // Server Characteristic Configuration
+            if let data = value as? Data, data.count >= 2 {
+                let config = UInt16(data[0]) | (UInt16(data[1]) << 8)
+                return config & 0x01 != 0 ? "Broadcasts Enabled" : "Broadcasts Disabled"
+            }
+        case "2901": // Characteristic User Description
+            if let str = value as? String {
+                return str
+            }
+        case "2904": // Characteristic Presentation Format
+            if let data = value as? Data, data.count >= 7 {
+                return "Format: \(data.map { String(format: "%02X", $0) }.joined(separator: " "))"
+            }
+        default:
+            break
+        }
+
+        // Fallback formatting
+        if let str = value as? String {
+            return str
+        } else if let data = value as? Data {
+            return data.map { String(format: "%02X", $0) }.joined(separator: " ")
+        } else if let num = value as? NSNumber {
+            return num.stringValue
+        }
+
+        return String(describing: value)
+    }
+
+    private func knownDescriptorName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            "2900": "Characteristic Extended Properties",
+            "2901": "Characteristic User Description",
+            "2902": "Client Characteristic Configuration",
+            "2903": "Server Characteristic Configuration",
+            "2904": "Characteristic Presentation Format",
+            "2905": "Characteristic Aggregate Format",
+            "2906": "Valid Range",
+            "2907": "External Report Reference",
+            "2908": "Report Reference"
+        ]
+        return known[uuid.uuidString]
+    }
+
+    private func knownCharacteristicName(_ uuid: CBUUID) -> String? {
+        let known: [String: String] = [
+            "2A00": "Device Name",
+            "2A19": "Battery Level",
+            "2A37": "Heart Rate Measurement",
+            "2A38": "Body Sensor Location",
+            "2A63": "Cycling Power Measurement",
+            "2ACC": "Fitness Machine Feature",
+            "2AD2": "Indoor Bike Data",
+            "2AD9": "Fitness Machine Control Point",
+            "2ADA": "Fitness Machine Status"
+        ]
+        return known[uuid.uuidString]
+    }
+}
+
 // MARK: - ble_read
 
 struct BleReadTool: Tool {

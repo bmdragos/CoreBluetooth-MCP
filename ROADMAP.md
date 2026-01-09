@@ -37,7 +37,7 @@
 - [x] `ble_write` - write to any characteristic (hex or text)
 - [x] `ble_subscribe` - subscribe to notifications from any characteristic
 - [x] `ble_unsubscribe` - stop notifications
-- [ ] `ble_descriptors` - read characteristic descriptors
+- [x] `ble_descriptors` - read characteristic descriptors
 
 ### Quality of Life
 

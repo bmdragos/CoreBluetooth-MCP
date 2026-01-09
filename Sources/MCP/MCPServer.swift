@@ -283,6 +283,7 @@ actor MCPServer {
         toolRegistry.register(BleStatusTool())
         toolRegistry.register(BleServicesTool())
         toolRegistry.register(BleCharacteristicsTool())
+        toolRegistry.register(BleDescriptorsTool())
         toolRegistry.register(BleReadTool())
         toolRegistry.register(BleWriteTool())
         toolRegistry.register(BleSubscribeTool())
