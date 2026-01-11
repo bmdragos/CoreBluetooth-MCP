@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ftms_monitor
 
 struct FtmsMonitorTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_monitor"
     let description = "Subscribe for a specified duration, then return a summary with min/max/avg stats."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "duration": .object([
@@ -16,18 +19,18 @@ struct FtmsMonitorTool: Tool {
                     "description": .string("Monitoring duration in seconds (default: 10, max: 300)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         let duration = min(arguments["duration"]?.intValue ?? 10, 300)
 
-        let stream = try await bleManager.subscribe(characteristicUUID: FTMS.indoorBikeData)
+        let stream = try await context.subscribe(characteristicUUID: FTMS.indoorBikeData)
 
         var samples: [IndoorBikeData] = []
         let startTime = Date()
@@ -42,7 +45,7 @@ struct FtmsMonitorTool: Tool {
             }
         }
 
-        await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+        await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
 
         let elapsed = Date().timeIntervalSince(startTime)
 
@@ -110,11 +113,13 @@ struct FtmsMonitorTool: Tool {
 // MARK: - ftms_test_sequence
 
 struct FtmsTestSequenceTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_test_sequence"
     let description = "Run a quick validation: request control → set 100W → read → set 150W → read → report results."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "power_low": .object([
@@ -130,11 +135,11 @@ struct FtmsTestSequenceTool: Tool {
                     "description": .string("Time to wait between commands in seconds (default: 2)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -152,7 +157,7 @@ struct FtmsTestSequenceTool: Tool {
         // Step 1: Request Control
         do {
             let data = Data([FTMS.OpCode.requestControl.rawValue])
-            try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+            try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
             try await Task.sleep(nanoseconds: 500_000_000)
             addResult("Request Control", "OK")
         } catch {
@@ -163,7 +168,7 @@ struct FtmsTestSequenceTool: Tool {
         do {
             let powerInt16 = Int16(clamping: powerLow)
             let data = Data([FTMS.OpCode.setTargetPower.rawValue, UInt8(truncatingIfNeeded: powerInt16), UInt8(truncatingIfNeeded: powerInt16 >> 8)])
-            try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+            try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
             addResult("Set \(powerLow)W", "Command sent")
         } catch {
             addResult("Set \(powerLow)W", "FAILED: \(error.localizedDescription)", success: false)
@@ -174,13 +179,13 @@ struct FtmsTestSequenceTool: Tool {
 
         // Step 3: Read data at low power (via subscribe - Indoor Bike Data is notify-only)
         do {
-            let stream = try await bleManager.subscribe(characteristicUUID: FTMS.indoorBikeData)
+            let stream = try await context.subscribe(characteristicUUID: FTMS.indoorBikeData)
             var data: Data?
             for await sample in stream {
                 data = sample
                 break
             }
-            await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+            await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
 
             if let data, let bikeData = IndoorBikeData.parse(from: data) {
                 addResult("Read @ \(powerLow)W", bikeData.summary)
@@ -195,7 +200,7 @@ struct FtmsTestSequenceTool: Tool {
         do {
             let powerInt16 = Int16(clamping: powerHigh)
             let data = Data([FTMS.OpCode.setTargetPower.rawValue, UInt8(truncatingIfNeeded: powerInt16), UInt8(truncatingIfNeeded: powerInt16 >> 8)])
-            try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+            try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
             addResult("Set \(powerHigh)W", "Command sent")
         } catch {
             addResult("Set \(powerHigh)W", "FAILED: \(error.localizedDescription)", success: false)
@@ -206,13 +211,13 @@ struct FtmsTestSequenceTool: Tool {
 
         // Step 5: Read data at high power (via subscribe - Indoor Bike Data is notify-only)
         do {
-            let stream = try await bleManager.subscribe(characteristicUUID: FTMS.indoorBikeData)
+            let stream = try await context.subscribe(characteristicUUID: FTMS.indoorBikeData)
             var data: Data?
             for await sample in stream {
                 data = sample
                 break
             }
-            await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+            await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
 
             if let data, let bikeData = IndoorBikeData.parse(from: data) {
                 addResult("Read @ \(powerHigh)W", bikeData.summary)

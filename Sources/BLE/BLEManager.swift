@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import CoreBluetooth
+import MCPServer
 
 // MARK: - Discovered Device
 

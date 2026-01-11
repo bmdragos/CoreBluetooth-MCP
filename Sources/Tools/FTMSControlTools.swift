@@ -1,28 +1,31 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ftms_request_control
 
 struct FtmsRequestControlTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_request_control"
     let description = "Request control of the FTMS device. Required before sending any control commands (set_power, start, stop, etc.)."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         // Request Control: opcode 0x00
         let data = Data([FTMS.OpCode.requestControl.rawValue])
-        try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+        try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
 
         // Small delay to allow device to process
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -34,11 +37,13 @@ struct FtmsRequestControlTool: Tool {
 // MARK: - ftms_set_power
 
 struct FtmsSetPowerTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_set_power"
     let description = "Set target power in watts. Requires ftms_request_control first."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "watts": .object([
@@ -47,11 +52,11 @@ struct FtmsSetPowerTool: Tool {
                 ])
             ]),
             "required": .array([.string("watts")])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -66,7 +71,7 @@ struct FtmsSetPowerTool: Tool {
         let highByte = UInt8(truncatingIfNeeded: powerInt16 >> 8)
         let data = Data([FTMS.OpCode.setTargetPower.rawValue, lowByte, highByte])
 
-        try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+        try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
 
         return "Target power set to \(watts)W"
     }
@@ -75,24 +80,26 @@ struct FtmsSetPowerTool: Tool {
 // MARK: - ftms_reset
 
 struct FtmsResetTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_reset"
     let description = "Send reset command to the FTMS device."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         let data = Data([FTMS.OpCode.reset.rawValue])
-        try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+        try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
 
         return "Reset command sent"
     }
@@ -101,24 +108,26 @@ struct FtmsResetTool: Tool {
 // MARK: - ftms_start
 
 struct FtmsStartTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_start"
     let description = "Start or resume the workout/training session."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         let data = Data([FTMS.OpCode.startOrResume.rawValue])
-        try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+        try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
 
         return "Start/resume command sent"
     }
@@ -127,11 +136,13 @@ struct FtmsStartTool: Tool {
 // MARK: - ftms_stop
 
 struct FtmsStopTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_stop"
     let description = "Stop or pause the workout/training session."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "pause": .object([
@@ -139,11 +150,11 @@ struct FtmsStopTool: Tool {
                     "description": .string("If true, pause instead of stop (default: false)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -153,7 +164,7 @@ struct FtmsStopTool: Tool {
         let param: UInt8 = isPause ? 0x02 : 0x01
         let data = Data([FTMS.OpCode.stopOrPause.rawValue, param])
 
-        try await bleManager.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
+        try await context.write(characteristicUUID: FTMS.fitnessMachineControlPoint, data: data)
 
         return isPause ? "Pause command sent" : "Stop command sent"
     }

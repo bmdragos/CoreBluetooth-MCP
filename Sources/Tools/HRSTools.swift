@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - hrs_discover
 
 struct HrsDiscoverTool: Tool {
+    typealias Context = BLEManager
+
     let name = "hrs_discover"
     let description = "Scan for Heart Rate Service devices (service UUID 0x180D)."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "duration": .object([
@@ -16,13 +19,13 @@ struct HrsDiscoverTool: Tool {
                     "description": .string("Scan duration in seconds (default: 5)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
         let duration = arguments["duration"]?.intValue.map { Double($0) } ?? 5.0
 
-        let devices = await bleManager.scan(duration: duration, serviceUUIDs: [HRS.serviceUUID])
+        let devices = await context.scan(duration: duration, serviceUUIDs: [HRS.serviceUUID])
 
         if devices.isEmpty {
             return "No Heart Rate devices found"
@@ -43,11 +46,13 @@ struct HrsDiscoverTool: Tool {
 // MARK: - hrs_read
 
 struct HrsReadTool: Tool {
+    typealias Context = BLEManager
+
     let name = "hrs_read"
     let description = "Read current heart rate. Returns BPM and sensor contact status."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "format": .object([
@@ -56,11 +61,11 @@ struct HrsReadTool: Tool {
                     "enum": .array([.string("text"), .string("json")])
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -68,7 +73,7 @@ struct HrsReadTool: Tool {
         let format = arguments["format"]?.stringValue ?? "text"
 
         // Subscribe briefly to get a reading (HR is notify-only on most devices)
-        let stream = try await bleManager.subscribe(characteristicUUID: HRS.heartRateMeasurement)
+        let stream = try await context.subscribe(characteristicUUID: HRS.heartRateMeasurement)
 
         var measurement: HeartRateMeasurement? = nil
         let startTime = Date()
@@ -79,7 +84,7 @@ struct HrsReadTool: Tool {
             if Date().timeIntervalSince(startTime) > 5.0 { break }
         }
 
-        await bleManager.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
+        await context.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
 
         guard let hr = measurement else {
             throw ToolError("No heart rate data received. Is the sensor worn?")
@@ -106,11 +111,13 @@ struct HrsReadTool: Tool {
 // MARK: - hrs_subscribe
 
 struct HrsSubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "hrs_subscribe"
     let description = "Stream heart rate data. Returns readings with min/max/avg stats."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "samples": .object([
@@ -122,11 +129,11 @@ struct HrsSubscribeTool: Tool {
                     "description": .string("Timeout in seconds (default: 30)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -134,7 +141,7 @@ struct HrsSubscribeTool: Tool {
         let sampleCount = min(arguments["samples"]?.intValue ?? 10, 100)
         let timeout = arguments["timeout"]?.intValue ?? 30
 
-        let stream = try await bleManager.subscribe(characteristicUUID: HRS.heartRateMeasurement)
+        let stream = try await context.subscribe(characteristicUUID: HRS.heartRateMeasurement)
 
         var readings: [HeartRateMeasurement] = []
         let startTime = Date()
@@ -147,7 +154,7 @@ struct HrsSubscribeTool: Tool {
             if Date().timeIntervalSince(startTime) > Double(timeout) { break }
         }
 
-        await bleManager.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
+        await context.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
 
         if readings.isEmpty {
             return "No heart rate data received within \(timeout)s timeout"
@@ -197,18 +204,20 @@ struct HrsSubscribeTool: Tool {
 // MARK: - hrs_unsubscribe
 
 struct HrsUnsubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "hrs_unsubscribe"
     let description = "Stop heart rate streaming."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        await bleManager.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        await context.unsubscribe(characteristicUUID: HRS.heartRateMeasurement)
         return "Unsubscribed from Heart Rate"
     }
 }
@@ -216,24 +225,26 @@ struct HrsUnsubscribeTool: Tool {
 // MARK: - hrs_location
 
 struct HrsLocationTool: Tool {
+    typealias Context = BLEManager
+
     let name = "hrs_location"
     let description = "Read body sensor location (chest, wrist, etc.)."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         do {
-            let data = try await bleManager.read(characteristicUUID: HRS.bodySensorLocation)
+            let data = try await context.read(characteristicUUID: HRS.bodySensorLocation)
             guard data.count >= 1 else {
                 throw ToolError("Invalid sensor location data")
             }

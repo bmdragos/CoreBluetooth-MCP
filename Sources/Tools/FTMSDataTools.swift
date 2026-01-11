@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ftms_read
 
 struct FtmsReadTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_read"
     let description = "Single read of Indoor Bike Data characteristic. Returns parsed values: power (watts), cadence (rpm), speed (km/h)."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "format": .object([
@@ -17,11 +20,11 @@ struct FtmsReadTool: Tool {
                     "enum": .array([.string("text"), .string("json"), .string("raw")])
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -29,7 +32,7 @@ struct FtmsReadTool: Tool {
         let format = arguments["format"]?.stringValue ?? "text"
 
         // Indoor Bike Data is notify-only per FTMS spec, so we subscribe and grab 1 sample
-        let stream = try await bleManager.subscribe(characteristicUUID: FTMS.indoorBikeData)
+        let stream = try await context.subscribe(characteristicUUID: FTMS.indoorBikeData)
         var data: Data?
 
         for await sample in stream {
@@ -37,7 +40,7 @@ struct FtmsReadTool: Tool {
             break  // Just grab first notification
         }
 
-        await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+        await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
 
         guard let data else {
             throw ToolError("No data received from Indoor Bike Data characteristic")
@@ -71,11 +74,13 @@ struct FtmsReadTool: Tool {
 // MARK: - ftms_subscribe
 
 struct FtmsSubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_subscribe"
     let description = "Subscribe to Indoor Bike Data notifications. Returns live streaming data. Use ftms_unsubscribe to stop."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "samples": .object([
@@ -91,11 +96,11 @@ struct FtmsSubscribeTool: Tool {
                     "description": .string("Output format: 'summary' (default), 'json', or 'raw'")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -104,7 +109,7 @@ struct FtmsSubscribeTool: Tool {
         let timeout = arguments["timeout"]?.intValue ?? 30
         let format = arguments["format"]?.stringValue ?? "summary"
 
-        let stream = try await bleManager.subscribe(characteristicUUID: FTMS.indoorBikeData)
+        let stream = try await context.subscribe(characteristicUUID: FTMS.indoorBikeData)
 
         var samples: [IndoorBikeData] = []
         var rawSamples: [Data] = []
@@ -125,7 +130,7 @@ struct FtmsSubscribeTool: Tool {
             }
         }
 
-        await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+        await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
 
         if samples.isEmpty {
             return "No data received (timeout: \(timeout)s)"
@@ -185,18 +190,17 @@ struct FtmsSubscribeTool: Tool {
 // MARK: - ftms_unsubscribe
 
 struct FtmsUnsubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_unsubscribe"
     let description = "Stop subscribing to Indoor Bike Data notifications."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        await bleManager.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        await context.unsubscribe(characteristicUUID: FTMS.indoorBikeData)
         return "Unsubscribed from Indoor Bike Data notifications"
     }
 }

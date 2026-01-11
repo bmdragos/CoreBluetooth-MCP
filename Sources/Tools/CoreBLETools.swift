@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ble_scan
 
 struct BleScanTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_scan"
     let description = "Scan for nearby BLE devices. Optionally filter by name or service UUID."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "duration": .object([
@@ -24,15 +27,15 @@ struct BleScanTool: Tool {
                     "description": .string("Filter by service UUID (e.g., '1826' for FTMS)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
         let duration = arguments["duration"]?.intValue.map { Double($0) } ?? 5.0
         let nameFilter = arguments["name_filter"]?.stringValue?.lowercased()
         let serviceUUID = arguments["service_uuid"]?.stringValue.map { CBUUID(string: $0) }
 
-        let devices = await bleManager.scan(duration: duration, serviceUUIDs: serviceUUID.map { [$0] })
+        let devices = await context.scan(duration: duration, serviceUUIDs: serviceUUID.map { [$0] })
 
         var filtered = devices
         if let nameFilter = nameFilter {
@@ -58,11 +61,13 @@ struct BleScanTool: Tool {
 // MARK: - ble_connect
 
 struct BleConnectTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_connect"
     let description = "Connect to a BLE device by name or UUID. Run ble_scan first to discover devices."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "identifier": .object([
@@ -71,23 +76,23 @@ struct BleConnectTool: Tool {
                 ])
             ]),
             "required": .array([.string("identifier")])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
         guard let identifier = arguments["identifier"]?.stringValue else {
             throw ToolError("Missing identifier parameter")
         }
 
         // Try as UUID first
         if let uuid = UUID(uuidString: identifier) {
-            try await bleManager.connect(identifier: uuid)
+            try await context.connect(identifier: uuid)
         } else {
             // Try as name
-            try await bleManager.connect(name: identifier)
+            try await context.connect(name: identifier)
         }
 
-        let info = await bleManager.getDeviceInfo()
+        let info = await context.getDeviceInfo()
         let deviceName = info?["name"] as? String ?? "Unknown"
         let services = info?["services"] as? [String] ?? []
 
@@ -98,21 +103,20 @@ struct BleConnectTool: Tool {
 // MARK: - ble_disconnect
 
 struct BleDisconnectTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_disconnect"
     let description = "Disconnect from the currently connected BLE device."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let info = await bleManager.getDeviceInfo()
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let info = await context.getDeviceInfo()
         let deviceName = info?["name"] as? String ?? "Unknown"
 
-        await bleManager.disconnect()
+        await context.disconnect()
 
         return "Disconnected from \(deviceName)"
     }
@@ -121,19 +125,18 @@ struct BleDisconnectTool: Tool {
 // MARK: - ble_status
 
 struct BleStatusTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_status"
     let description = "Show current BLE connection state, device info, and signal strength."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
-        let btState = await bleManager.state
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
+        let btState = await context.state
 
         var lines: [String] = []
 
@@ -161,11 +164,11 @@ struct BleStatusTool: Tool {
         lines.append("Connection: \(connStateStr)")
 
         if state == .connected {
-            if let info = await bleManager.getDeviceInfo() {
+            if let info = await context.getDeviceInfo() {
                 lines.append("Device: \(info["name"] as? String ?? "Unknown")")
                 lines.append("UUID: \(info["identifier"] as? String ?? "Unknown")")
 
-                if let rssi = await bleManager.getRSSI() {
+                if let rssi = await context.getRSSI() {
                     lines.append("RSSI: \(rssi) dBm")
                 }
 
@@ -187,23 +190,22 @@ struct BleStatusTool: Tool {
 // MARK: - ble_services
 
 struct BleServicesTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_services"
     let description = "List all services on the connected device with their UUIDs and characteristic count."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
-        let services = await bleManager.getServices()
+        let services = await context.getServices()
 
         if services.isEmpty {
             return "No services discovered"
@@ -243,23 +245,21 @@ struct BleServicesTool: Tool {
 // MARK: - ble_characteristics
 
 struct BleCharacteristicsTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_characteristics"
     let description = "List characteristics for a service (or all services) with their properties (read/write/notify)."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "service": .object([
-                    "type": .string("string"),
-                    "description": .string("Service UUID to inspect (e.g., '1826'). If omitted, lists all characteristics.")
-                ])
-            ])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "service": Schema.string(description: "Service UUID to inspect (e.g., '1826'). If omitted, lists all characteristics.")
+            ]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -267,7 +267,7 @@ struct BleCharacteristicsTool: Tool {
         if let serviceUUIDString = arguments["service"]?.stringValue {
             // List characteristics for specific service
             let serviceUUID = CBUUID(string: serviceUUIDString)
-            guard let characteristics = await bleManager.getCharacteristics(forService: serviceUUID) else {
+            guard let characteristics = await context.getCharacteristics(forService: serviceUUID) else {
                 throw ToolError("Service \(serviceUUIDString) not found")
             }
 
@@ -286,7 +286,7 @@ struct BleCharacteristicsTool: Tool {
             return lines.joined(separator: "\n")
         } else {
             // List all characteristics grouped by service
-            let allChars = await bleManager.getAllCharacteristics()
+            let allChars = await context.getAllCharacteristics()
 
             if allChars.isEmpty {
                 return "No characteristics discovered"
@@ -395,27 +395,22 @@ struct BleCharacteristicsTool: Tool {
 // MARK: - ble_descriptors
 
 struct BleDescriptorsTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_descriptors"
     let description = "List descriptors for a characteristic. Descriptors provide metadata like CCCD (notifications config)."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "characteristic": .object([
-                    "type": .string("string"),
-                    "description": .string("Characteristic UUID to list descriptors for (e.g., '2A37'). If omitted, lists all descriptors.")
-                ]),
-                "read_values": .object([
-                    "type": .string("boolean"),
-                    "description": .string("Read descriptor values (default: false)")
-                ])
-            ])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "characteristic": Schema.string(description: "Characteristic UUID to list descriptors for (e.g., '2A37'). If omitted, lists all descriptors."),
+                "read_values": Schema.bool(description: "Read descriptor values (default: false)")
+            ]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -425,7 +420,7 @@ struct BleDescriptorsTool: Tool {
         if let charUUIDString = arguments["characteristic"]?.stringValue {
             // List descriptors for specific characteristic
             let charUUID = CBUUID(string: charUUIDString)
-            guard let descriptors = await bleManager.getDescriptors(forCharacteristic: charUUID) else {
+            guard let descriptors = await context.getDescriptors(forCharacteristic: charUUID) else {
                 return "No descriptors found for characteristic \(charUUIDString)"
             }
 
@@ -443,7 +438,7 @@ struct BleDescriptorsTool: Tool {
                 lines.append("  Name: \(name)")
 
                 if readValues {
-                    if let value = try? await bleManager.readDescriptor(descriptor) {
+                    if let value = try? await context.readDescriptor(descriptor) {
                         lines.append("  Value: \(formatDescriptorValue(descriptor.uuid, value: value))")
                     }
                 }
@@ -452,7 +447,7 @@ struct BleDescriptorsTool: Tool {
             return lines.joined(separator: "\n")
         } else {
             // List all descriptors grouped by characteristic
-            let allDescriptors = await bleManager.getAllDescriptors()
+            let allDescriptors = await context.getAllDescriptors()
 
             if allDescriptors.isEmpty {
                 return "No descriptors discovered"
@@ -475,7 +470,7 @@ struct BleDescriptorsTool: Tool {
                     var line = "  • \(descriptor.uuid.uuidString) - \(name)"
 
                     if readValues {
-                        if let value = try? await bleManager.readDescriptor(descriptor) {
+                        if let value = try? await context.readDescriptor(descriptor) {
                             line += " = \(formatDescriptorValue(descriptor.uuid, value: value))"
                         }
                     }
@@ -563,24 +558,22 @@ struct BleDescriptorsTool: Tool {
 // MARK: - ble_read
 
 struct BleReadTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_read"
     let description = "Read any characteristic by UUID. Returns hex data and decoded values if possible."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "uuid": .object([
-                    "type": .string("string"),
-                    "description": .string("Characteristic UUID (e.g., '2A19' for battery level, or full UUID)")
-                ])
-            ]),
-            "required": .array([.string("uuid")])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "uuid": Schema.string(description: "Characteristic UUID (e.g., '2A19' for battery level, or full UUID)")
+            ],
+            required: ["uuid"]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -590,7 +583,7 @@ struct BleReadTool: Tool {
         }
 
         let uuid = CBUUID(string: uuidString)
-        let data = try await bleManager.read(characteristicUUID: uuid)
+        let data = try await context.read(characteristicUUID: uuid)
 
         var lines: [String] = []
         lines.append("Characteristic: \(uuid.uuidString)")
@@ -658,36 +651,25 @@ struct BleReadTool: Tool {
 // MARK: - ble_write
 
 struct BleWriteTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_write"
     let description = "Write to any characteristic by UUID. Supports hex bytes or text."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "uuid": .object([
-                    "type": .string("string"),
-                    "description": .string("Characteristic UUID (e.g., '2AD9')")
-                ]),
-                "hex": .object([
-                    "type": .string("string"),
-                    "description": .string("Hex bytes to write, space-separated (e.g., '05 64 00')")
-                ]),
-                "text": .object([
-                    "type": .string("string"),
-                    "description": .string("Text to write (alternative to hex)")
-                ]),
-                "response": .object([
-                    "type": .string("boolean"),
-                    "description": .string("Wait for write response (default: true)")
-                ])
-            ]),
-            "required": .array([.string("uuid")])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "uuid": Schema.string(description: "Characteristic UUID (e.g., '2AD9')"),
+                "hex": Schema.string(description: "Hex bytes to write, space-separated (e.g., '05 64 00')"),
+                "text": Schema.string(description: "Text to write (alternative to hex)"),
+                "response": Schema.bool(description: "Wait for write response (default: true)")
+            ],
+            required: ["uuid"]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -719,7 +701,7 @@ struct BleWriteTool: Tool {
         let withResponse = arguments["response"]?.stringValue != "false"
 
         let uuid = CBUUID(string: uuidString)
-        try await bleManager.write(characteristicUUID: uuid, data: data, withResponse: withResponse)
+        try await context.write(characteristicUUID: uuid, data: data, withResponse: withResponse)
 
         let responseType = withResponse ? "with response" : "without response"
         return "Wrote \(data.count) bytes to \(uuid.uuidString) (\(responseType))\nData: \(data.hexString)"
@@ -729,36 +711,25 @@ struct BleWriteTool: Tool {
 // MARK: - ble_subscribe
 
 struct BleSubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_subscribe"
     let description = "Subscribe to notifications from any characteristic. Collects samples and returns summary."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "uuid": .object([
-                    "type": .string("string"),
-                    "description": .string("Characteristic UUID to subscribe to (e.g., '2A37' for heart rate)")
-                ]),
-                "samples": .object([
-                    "type": .string("integer"),
-                    "description": .string("Number of notifications to collect (default: 10, max: 100)")
-                ]),
-                "timeout": .object([
-                    "type": .string("integer"),
-                    "description": .string("Timeout in seconds (default: 30)")
-                ]),
-                "format": .object([
-                    "type": .string("string"),
-                    "description": .string("Output format: 'hex' (default), 'ascii', or 'raw'")
-                ])
-            ]),
-            "required": .array([.string("uuid")])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "uuid": Schema.string(description: "Characteristic UUID to subscribe to (e.g., '2A37' for heart rate)"),
+                "samples": Schema.int(description: "Number of notifications to collect (default: 10, max: 100)"),
+                "timeout": Schema.int(description: "Timeout in seconds (default: 30)"),
+                "format": Schema.string(description: "Output format: 'hex' (default), 'ascii', or 'raw'")
+            ],
+            required: ["uuid"]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -772,7 +743,7 @@ struct BleSubscribeTool: Tool {
         let format = arguments["format"]?.stringValue ?? "hex"
 
         let uuid = CBUUID(string: uuidString)
-        let stream = try await bleManager.subscribe(characteristicUUID: uuid)
+        let stream = try await context.subscribe(characteristicUUID: uuid)
 
         var samples: [Data] = []
         let startTime = Date()
@@ -787,7 +758,7 @@ struct BleSubscribeTool: Tool {
             }
         }
 
-        await bleManager.unsubscribe(characteristicUUID: uuid)
+        await context.unsubscribe(characteristicUUID: uuid)
 
         if samples.isEmpty {
             return "No notifications received within \(timeout)s timeout"
@@ -817,24 +788,22 @@ struct BleSubscribeTool: Tool {
 // MARK: - ble_unsubscribe
 
 struct BleUnsubscribeTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_unsubscribe"
     let description = "Stop notifications from a characteristic."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([
-                "uuid": .object([
-                    "type": .string("string"),
-                    "description": .string("Characteristic UUID to unsubscribe from")
-                ])
-            ]),
-            "required": .array([.string("uuid")])
-        ]
+    var inputSchema: JSONValue {
+        Schema.object(
+            properties: [
+                "uuid": Schema.string(description: "Characteristic UUID to unsubscribe from")
+            ],
+            required: ["uuid"]
+        )
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -844,7 +813,7 @@ struct BleUnsubscribeTool: Tool {
         }
 
         let uuid = CBUUID(string: uuidString)
-        await bleManager.unsubscribe(characteristicUUID: uuid)
+        await context.unsubscribe(characteristicUUID: uuid)
 
         return "Unsubscribed from \(uuid.uuidString)"
     }
@@ -853,18 +822,17 @@ struct BleUnsubscribeTool: Tool {
 // MARK: - ble_battery
 
 struct BleBatteryTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_battery"
     let description = "Read battery level from a device (if Battery Service 0x180F is available)."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -872,7 +840,7 @@ struct BleBatteryTool: Tool {
         let batteryUUID = CBUUID(string: "2A19")
 
         do {
-            let data = try await bleManager.read(characteristicUUID: batteryUUID)
+            let data = try await context.read(characteristicUUID: batteryUUID)
             guard data.count >= 1 else {
                 throw ToolError("Invalid battery data")
             }
@@ -887,14 +855,13 @@ struct BleBatteryTool: Tool {
 // MARK: - ble_device_info
 
 struct BleDeviceInfoTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ble_device_info"
     let description = "Read Device Information Service (manufacturer, model, serial, firmware, etc.)."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
     private let deviceInfoCharacteristics: [(uuid: String, name: String)] = [
@@ -908,8 +875,8 @@ struct BleDeviceInfoTool: Tool {
         ("2A2A", "IEEE Regulatory Cert")
     ]
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -923,7 +890,7 @@ struct BleDeviceInfoTool: Tool {
         for (uuidStr, name) in deviceInfoCharacteristics {
             let uuid = CBUUID(string: uuidStr)
             do {
-                let data = try await bleManager.read(characteristicUUID: uuid)
+                let data = try await context.read(characteristicUUID: uuid)
                 if let value = String(data: data, encoding: .utf8) {
                     lines.append("\(name): \(value)")
                     foundAny = true

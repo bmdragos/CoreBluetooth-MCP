@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ftms_discover
 
 struct FtmsDiscoverTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_discover"
     let description = "Scan specifically for FTMS (Fitness Machine Service) devices with service UUID 0x1826."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "duration": .object([
@@ -16,13 +19,13 @@ struct FtmsDiscoverTool: Tool {
                     "description": .string("Scan duration in seconds (default: 5)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
         let duration = arguments["duration"]?.intValue.map { Double($0) } ?? 5.0
 
-        let devices = await bleManager.scan(duration: duration, serviceUUIDs: [FTMS.serviceUUID])
+        let devices = await context.scan(duration: duration, serviceUUIDs: [FTMS.serviceUUID])
 
         if devices.isEmpty {
             return "No FTMS devices found. Make sure your fitness equipment is powered on and in pairing mode."
@@ -40,24 +43,23 @@ struct FtmsDiscoverTool: Tool {
 // MARK: - ftms_info
 
 struct FtmsInfoTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_info"
     let description = "Read FTMS Feature characteristic to show supported features (power control, cadence, etc.)."
 
-    var inputSchema: [String: JSONValue] {
-        [
-            "type": .string("object"),
-            "properties": .object([:])
-        ]
+    var inputSchema: JSONValue {
+        Schema.empty
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
 
         // Read Feature characteristic
-        let data = try await bleManager.read(characteristicUUID: FTMS.fitnessMachineFeature)
+        let data = try await context.read(characteristicUUID: FTMS.fitnessMachineFeature)
 
         guard let features = FTMSFeatures.parse(from: data) else {
             return "Failed to parse FTMS features. Raw data: \(data.hexString)"
@@ -80,7 +82,7 @@ struct FtmsInfoTool: Tool {
 
         // Try to read power range if available
         do {
-            let powerRangeData = try await bleManager.read(characteristicUUID: FTMS.supportedPowerRange)
+            let powerRangeData = try await context.read(characteristicUUID: FTMS.supportedPowerRange)
             if powerRangeData.count >= 6 {
                 let minPower = Int16(bitPattern: UInt16(powerRangeData[0]) | (UInt16(powerRangeData[1]) << 8))
                 let maxPower = Int16(bitPattern: UInt16(powerRangeData[2]) | (UInt16(powerRangeData[3]) << 8))

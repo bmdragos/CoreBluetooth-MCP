@@ -1,14 +1,17 @@
 import Foundation
 import CoreBluetooth
+import MCPServer
 
 // MARK: - ftms_raw_read
 
 struct FtmsRawReadTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_raw_read"
     let description = "Read any characteristic as raw hex bytes. Use for debugging or custom characteristics."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "uuid": .object([
@@ -17,11 +20,11 @@ struct FtmsRawReadTool: Tool {
                 ])
             ]),
             "required": .array([.string("uuid")])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -31,7 +34,7 @@ struct FtmsRawReadTool: Tool {
         }
 
         let uuid = CBUUID(string: uuidString)
-        let data = try await bleManager.read(characteristicUUID: uuid)
+        let data = try await context.read(characteristicUUID: uuid)
 
         var lines: [String] = []
         lines.append("UUID: \(uuid.uuidString)")
@@ -59,11 +62,13 @@ struct FtmsRawReadTool: Tool {
 // MARK: - ftms_raw_write
 
 struct FtmsRawWriteTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_raw_write"
     let description = "Write raw hex bytes to any characteristic. Use for debugging or custom commands."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "uuid": .object([
@@ -80,11 +85,11 @@ struct FtmsRawWriteTool: Tool {
                 ])
             ]),
             "required": .array([.string("uuid"), .string("hex")])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        let state = await bleManager.connectionState
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        let state = await context.connectionState
         guard state == .connected else {
             throw ToolError("Not connected. Use ble_connect first.")
         }
@@ -112,7 +117,7 @@ struct FtmsRawWriteTool: Tool {
         let data = Data(hexParts)
         let uuid = CBUUID(string: uuidString)
 
-        try await bleManager.write(characteristicUUID: uuid, data: data, withResponse: !noResponse)
+        try await context.write(characteristicUUID: uuid, data: data, withResponse: !noResponse)
 
         return "Wrote \(data.count) bytes to \(uuid.uuidString): \(data.hexString)"
     }
@@ -121,11 +126,13 @@ struct FtmsRawWriteTool: Tool {
 // MARK: - ftms_log_start
 
 struct FtmsLogStartTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_log_start"
     let description = "Start logging all notifications to a CSV file."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([
                 "file": .object([
@@ -133,14 +140,14 @@ struct FtmsLogStartTool: Tool {
                     "description": .string("Output file path (default: ~/ftms_log_<timestamp>.csv)")
                 ])
             ])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
         let defaultPath = NSHomeDirectory() + "/ftms_log_\(Int(Date().timeIntervalSince1970)).csv"
         let filePath = arguments["file"]?.stringValue ?? defaultPath
 
-        try await bleManager.startLogging(filePath: filePath)
+        try await context.startLogging(filePath: filePath)
 
         return "Logging started to: \(filePath)\nUse ftms_log_stop to stop and finalize."
     }
@@ -149,18 +156,20 @@ struct FtmsLogStartTool: Tool {
 // MARK: - ftms_log_stop
 
 struct FtmsLogStopTool: Tool {
+    typealias Context = BLEManager
+
     let name = "ftms_log_stop"
     let description = "Stop logging notifications and finalize the log file."
 
-    var inputSchema: [String: JSONValue] {
-        [
+    var inputSchema: JSONValue {
+        .object([
             "type": .string("object"),
             "properties": .object([:])
-        ]
+        ])
     }
 
-    func execute(arguments: [String: JSONValue], bleManager: BLEManager) async throws -> String {
-        guard let path = await bleManager.stopLogging() else {
+    func execute(arguments: [String: JSONValue], context: BLEManager) async throws -> String {
+        guard let path = await context.stopLogging() else {
             return "Logging was not active"
         }
 
